@@ -18,7 +18,7 @@
         </p>
       </a>
 
-      {% if request.user == message.user %}
+      {% if request.user.id == message.user.id %}
       <div class="roomListRoom__actions">
         <a href="{% url 'delete-message' message.id %}">
           <svg
