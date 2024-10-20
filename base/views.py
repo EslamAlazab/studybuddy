@@ -73,8 +73,10 @@ def edit_user(request):
 
 def user_profile(request, pk):
     user = User.objects.get(id=pk)
-    rooms = user.room_set.select_related('host', 'topic').all()
-    room_messages = user.message_set.select_related('user', 'room').all()[:3]
+    rooms = user.room_set.only('name', 'joined_count', 'created', 'topic', 'host__username',
+                               'host__avatar').select_related('host', 'topic').all()
+    room_messages = user.message_set.only(
+        'body', 'created', 'room__name', 'user__username', 'user__avatar').select_related('user', 'room').all()[:3]
     topics = Topic.objects.annotate(room_count=Count('room')).all()[:5]
     topics.count = Topic.objects.count()
     context = {'user': user, 'rooms': rooms,
@@ -183,14 +185,15 @@ def home(request):
         )
     else:
         # Fetch rooms and their hosts in one query (select_related)
-        rooms = Room.objects.select_related('host', 'topic').all()
+        rooms = Room.objects.only('name', 'joined_count', 'created', 'topic', 'host__username',
+                                  'host__avatar').select_related('host', 'topic').all()
 
     topics = Topic.objects.annotate(room_count=Count('room')).all()[:5]
     topics.count = Topic.objects.count()
     room_count = len(rooms)
 
     # Fetch room messages with the related room and topic using select_related
-    room_messages = Message.objects.select_related('user', 'room').filter(
+    room_messages = Message.objects.only('body', 'created', 'room__name', 'user__username', 'user__avatar').select_related('user', 'room').filter(
         Q(room__topic__name__icontains=q)
     )[:3]
 
@@ -201,7 +204,9 @@ def home(request):
 
 def topics_page(request):
     q = request.GET.get('q') if request.GET.get('q') != None else ''
-    topics = Topic.objects.filter(name__icontains=q)
+    topics = Topic.objects.annotate(
+        room_count=Count('room')).filter(name__icontains=q)
+    topics.count = len(topics)
     return render(request, 'base/topics.html', {'topics': topics})
 
 
