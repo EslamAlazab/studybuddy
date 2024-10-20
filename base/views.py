@@ -4,7 +4,7 @@ from .models import User, Topic, Room, Message
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from .forms import UserForm, MyUserCreationForm, RoomForm
-from django.db.models import Q
+from django.db.models import Q, Prefetch, Count
 
 
 def user_login(request):
@@ -36,7 +36,7 @@ def user_login(request):
 @login_required(login_url='login')
 def logoutUser(request):
     logout(request)
-    # messages.info(request, "User is successful logout!")
+    messages.info(request, "User is successful logout!")
     return redirect('login')
 
 
@@ -51,8 +51,8 @@ def user_register(request):
             user.save()
 
             # Log the user in and redirect to the home page
-            # login(request, user)
-            # return redirect('home')
+            login(request, user)
+            return redirect('home')
 
     return render(request, 'base/register.html', {'form': form})
 
@@ -73,9 +73,10 @@ def edit_user(request):
 
 def user_profile(request, pk):
     user = User.objects.get(id=pk)
-    rooms = user.room_set.all()
-    room_messages = user.message_set.all()
-    topics = Topic.objects.all()
+    rooms = user.room_set.select_related('host', 'topic').all()
+    room_messages = user.message_set.select_related('user', 'room').all()[:3]
+    topics = Topic.objects.annotate(room_count=Count('room')).all()[:5]
+    topics.count = Topic.objects.count()
     context = {'user': user, 'rooms': rooms,
                'room_messages': room_messages, 'topics': topics}
     return render(request, 'base/profile.html', context)
@@ -136,7 +137,9 @@ def delete_room(request, pk):
 
 
 def get_room(request, pk):
-    room = Room.objects.get(id=pk)
+    room = Room.objects.prefetch_related(
+        Prefetch('message_set', queryset=Message.objects.select_related('user')),
+        'participants').select_related('host', 'topic').get(id=pk)
     room_messages = room.message_set.all()
     participants = room.participants.all()
 
@@ -147,6 +150,8 @@ def get_room(request, pk):
             body=request.POST.get('body')
         )
         room.participants.add(request.user)
+        room.joined_count = room.participants.all().count()
+        room.save()
         return redirect('get-room', pk=room.id)
 
     context = {'room': room, 'room_messages': room_messages,
@@ -170,16 +175,24 @@ def delete_message(request, pk):
 def home(request):
     q = request.GET.get('q') if request.GET.get('q') != None else ''
 
-    rooms = Room.objects.filter(
-        Q(topic__name__icontains=q) |
-        Q(name__icontains=q) |
-        Q(description__icontains=q)
-    )
+    if q:
+        rooms = Room.objects.select_related('host', 'topic').filter(
+            Q(topic__name__icontains=q) |
+            Q(name__icontains=q) |
+            Q(description__icontains=q)
+        )
+    else:
+        # Fetch rooms and their hosts in one query (select_related)
+        rooms = Room.objects.select_related('host', 'topic').all()
 
-    topics = Topic.objects.all()[0:5]
-    room_count = rooms.count()
-    room_messages = Message.objects.filter(
-        Q(room__topic__name__icontains=q))[0:3]
+    topics = Topic.objects.annotate(room_count=Count('room')).all()[:5]
+    topics.count = Topic.objects.count()
+    room_count = len(rooms)
+
+    # Fetch room messages with the related room and topic using select_related
+    room_messages = Message.objects.select_related('user', 'room').filter(
+        Q(room__topic__name__icontains=q)
+    )[:3]
 
     context = {'rooms': rooms, 'topics': topics,
                'room_count': room_count, 'room_messages': room_messages}
