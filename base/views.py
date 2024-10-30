@@ -5,6 +5,61 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from .forms import UserForm, MyUserCreationForm, RoomForm
 from django.db.models import Q, Prefetch, Count
+from django.core.paginator import Paginator
+from .utils import CustomPaginator
+
+
+def get_query_params(request):
+    """
+    Helper function to get query parameters
+    """
+    q = request.GET.get('q') if request.GET.get('q') is not None else ''
+    page = max(int(request.GET.get('page', 1)), 1)
+    size = max(int(request.GET.get('size', 9)), 9)
+    return q, page, size
+
+
+def get_paginated_rooms(q,page, size):
+    """
+    Helper function to fetch rooms based on search query
+    """
+    if q:
+        # Filter rooms based on the search query
+        rooms_query = Room.objects.only(
+            'name', 'joined_count', 'created', 'topic', 'host__username', 'host__avatar'
+        ).select_related('host', 'topic').filter(
+            Q(topic__name__icontains=q) |
+            Q(name__icontains=q) |
+            Q(description__icontains=q)
+        )
+    else:
+        # Fetch all rooms without filtering
+        rooms_query = Room.objects.only(
+            'name', 'joined_count', 'created', 'topic', 'host__username', 'host__avatar'
+        ).select_related('host', 'topic').all()
+
+    p = Paginator(rooms_query, size)
+    rooms = p.get_page(page)
+    page_range = p.get_elided_page_range(page)
+
+    return rooms, page_range
+
+
+def get_topics():
+    """Helper function to fetch topics"""
+    topics = Topic.objects.annotate(room_count=Count('room')).all()[:5]
+    topics.count = Topic.objects.count()
+    return topics
+
+
+def get_room_messages(q):
+    """Helper function to fetch recent room messages"""
+    room_messages = Message.objects.only(
+        'body', 'created', 'room__name', 'user__username', 'user__avatar'
+    ).select_related('user', 'room').filter(
+        Q(room__topic__name__icontains=q)
+    )[:3]
+    return room_messages
 
 
 def user_login(request):
@@ -73,14 +128,22 @@ def edit_user(request):
 
 def user_profile(request, pk):
     user = User.objects.get(id=pk)
-    rooms = user.room_set.only('name', 'joined_count', 'created', 'topic', 'host__username',
+
+    page = max(int(request.GET.get('page', 1)), 1)
+    size = max(int(request.GET.get('size', 6)), 6)
+
+    rooms_query = user.room_set.only('name', 'joined_count', 'created', 'topic', 'host__username',
                                'host__avatar').select_related('host', 'topic').all()
+    p = Paginator(rooms_query, size)
+    rooms = p.get_page(page)
+    page_range = p.get_elided_page_range(page)
+
     room_messages = user.message_set.only(
         'body', 'created', 'room__name', 'user__username', 'user__avatar').select_related('user', 'room').all()[:3]
-    topics = Topic.objects.annotate(room_count=Count('room')).all()[:5]
-    topics.count = Topic.objects.count()
+    topics = get_topics()
+
     context = {'user': user, 'rooms': rooms,
-               'room_messages': room_messages, 'topics': topics}
+               'room_messages': room_messages, 'topics': topics, 'page_range': page_range}
     return render(request, 'base/profile.html', context)
 
 
@@ -175,39 +238,44 @@ def delete_message(request, pk):
 
 
 def home(request):
-    q = request.GET.get('q') if request.GET.get('q') != None else ''
+    # Step 1: Get query parameters (q, page, size)
+    q, page, size = get_query_params(request)
 
-    if q:
-        rooms = Room.objects.select_related('host', 'topic').filter(
-            Q(topic__name__icontains=q) |
-            Q(name__icontains=q) |
-            Q(description__icontains=q)
-        )
-    else:
-        # Fetch rooms and their hosts in one query (select_related)
-        rooms = Room.objects.only('name', 'joined_count', 'created', 'topic', 'host__username',
-                                  'host__avatar').select_related('host', 'topic').all()
+    # Step 2: Fetch rooms and apply pagination logic
+    room_count = Room.objects.count()
+    rooms, page_range = get_paginated_rooms(q,page,size)
 
-    topics = Topic.objects.annotate(room_count=Count('room')).all()[:5]
-    topics.count = Topic.objects.count()
-    room_count = len(rooms)
+    # Step 3: Fetch additional data (topics and recent messages)
+    topics = get_topics()
+    room_messages = get_room_messages(q)
 
-    # Fetch room messages with the related room and topic using select_related
-    room_messages = Message.objects.only('body', 'created', 'room__name', 'user__username', 'user__avatar').select_related('user', 'room').filter(
-        Q(room__topic__name__icontains=q)
-    )[:3]
+    # Step 4: Prepare context data
+    context = {
+        'rooms': rooms,
+        'topics': topics,
+        'room_count': room_count,
+        'room_messages': room_messages,
+        'page_range': page_range,
+        'q': q,
+    }
 
-    context = {'rooms': rooms, 'topics': topics,
-               'room_count': room_count, 'room_messages': room_messages}
+    # Step 5: Render template
     return render(request, 'base/home.html', context)
 
 
 def topics_page(request):
     q = request.GET.get('q') if request.GET.get('q') != None else ''
-    topics = Topic.objects.annotate(
+    page = max(int(request.GET.get('page', 1)), 1)
+    size = max(int(request.GET.get('size', 6)), 6)
+
+    topics_query = Topic.objects.annotate(
         room_count=Count('room')).filter(name__icontains=q)
-    topics.count = len(topics)
-    return render(request, 'base/topics.html', {'topics': topics})
+    p = Paginator(topics_query, size)
+    topics = p.get_page(page)
+    page_range = p.get_elided_page_range(page)
+    
+    topics.count = Topic.objects.count()
+    return render(request, 'base/topics.html', {'topics': topics, 'q': q, 'page_range': page_range})
 
 
 def activity_page(request):

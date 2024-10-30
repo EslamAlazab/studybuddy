@@ -502,6 +502,7 @@ a {
   border-radius: 1rem;
   box-shadow: 1px 1px 6px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  margin-top: 80px;
 }
 
 .layout__boxHeader {
@@ -1231,4 +1232,30 @@ a {
   font-weight: 500;
   color: var(--color-main);
   font-weight: 1.4rem;
+}
+/*=======================
+  Pagination
+========================*/
+.pagination {
+  margin-top: 8rem;
+  margin-bottom: 10rem;
+}
+
+.pagination > ul {
+  flex-wrap: wrap;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.pagination .btn {
+  color: var(--color-sub);
+}
+
+.pagination .btn.btn--sub {
+  background-color: var(--color-dark-medium);
+  color: var(--color-accent);
+  transform: scale(1.05);
 }

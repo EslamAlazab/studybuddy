@@ -1,0 +1,40 @@
+{% if paginator.has_other_pages %}
+<div class="pagination">
+  <ul class="container">
+    {% if paginator.has_previous %}
+    <li>
+      <a
+        href="?page{{paginator.previous_page_number}}{% if q %}&q={{ q }}{% endif %}"
+        class="btn page-link"
+        >&#10094; Prev</a
+      >
+    </li>
+    {% endif %} {% for page in page_range %} {% if page == paginator.number%}
+    <li>
+      <a
+        href="?page={{page}}{% if q %}&q={{ q }}{% endif %}"
+        class="btn btn--sub"
+        >{{page}}</a
+      >
+    </li>
+    {% else %}
+    <li>
+      <a
+        href="?page={{page}}{% if q %}&q={{ q }}{% endif %}"
+        class="btn page-link"
+        >{{page}}</a
+      >
+    </li>
+    {% endif %} {% endfor %} {% if paginator.has_next %}
+    <li>
+      <a
+        href="?page={{paginator.next_page_number}}{% if q %}&q={{ q }}{% endif %}"
+        class="btn page-link"
+        data-page="{{paginator.next_page_number}}"
+        >Next &#10095;</a
+      >
+    </li>
+    {% endif %}
+  </ul>
+</div>
+{% endif %}
