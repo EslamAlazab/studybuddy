@@ -12,3 +12,7 @@ urlpatterns = [
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 urlpatterns += debug_toolbar_urls()
+
+admin.site.site_header = 'Studybuddy Admin'
+admin.site.site_title = 'Studybuddy Admin'
+# admin.site.index_title = 'Studybuddy Admin'
