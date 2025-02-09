@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: studybud_postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - 5432:5432
+  django_app:
+    image: studybud
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./static:/app/static
+    expose:
+      - 8000
+    depends_on:
+      - postgres
+
+  nginx:
+    image: nginx-custom
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - 80:80
+    volumes:
+      - ./static:/app/static
+    depends_on:
+      - django_app
+
+volumes:
+  postgres_data:
