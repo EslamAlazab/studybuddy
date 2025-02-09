@@ -19,7 +19,7 @@ def get_query_params(request):
     return q, page, size
 
 
-def get_paginated_rooms(q,page, size):
+def get_paginated_rooms(q, page, size):
     """
     Helper function to fetch rooms based on search query
     """
@@ -41,8 +41,8 @@ def get_paginated_rooms(q,page, size):
     p = Paginator(rooms_query, size)
     rooms = p.get_page(page)
     page_range = p.get_elided_page_range(page)
-
-    return rooms, page_range
+    rooms_count = p.count
+    return rooms, page_range, rooms_count
 
 
 def get_topics():
@@ -133,7 +133,7 @@ def user_profile(request, pk):
     size = max(int(request.GET.get('size', 6)), 6)
 
     rooms_query = user.room_set.only('name', 'joined_count', 'created', 'topic', 'host__username',
-                               'host__avatar').select_related('host', 'topic').all()
+                                     'host__avatar').select_related('host', 'topic').all()
     p = Paginator(rooms_query, size)
     rooms = p.get_page(page)
     page_range = p.get_elided_page_range(page)
@@ -242,8 +242,7 @@ def home(request):
     q, page, size = get_query_params(request)
 
     # Step 2: Fetch rooms and apply pagination logic
-    room_count = Room.objects.count()
-    rooms, page_range = get_paginated_rooms(q,page,size)
+    rooms, page_range, room_count = get_paginated_rooms(q, page, size)
 
     # Step 3: Fetch additional data (topics and recent messages)
     topics = get_topics()
@@ -273,7 +272,7 @@ def topics_page(request):
     p = Paginator(topics_query, size)
     topics = p.get_page(page)
     page_range = p.get_elided_page_range(page)
-    
+
     topics.count = Topic.objects.count()
     return render(request, 'base/topics.html', {'topics': topics, 'q': q, 'page_range': page_range})
 
